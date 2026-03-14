@@ -2,50 +2,107 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Retailcloud Ticket Formatter</title>
-
+<title>Retailcloud Zoho Ticket Formatter</title>
 <style>
-body{
-font-family:Arial;
-padding:40px;
-background:#f5f5f5;
-}
+  body {
+    font-family: Arial, sans-serif;
+    padding: 40px;
+    background: #f9f9f9;
+    color: #333;
+  }
 
-textarea{
-width:100%;
-height:300px;
-padding:10px;
-}
+  h2 {
+    color: #0b57d0;
+  }
 
-button{
-padding:12px 25px;
-margin-top:15px;
-font-size:16px;
-cursor:pointer;
-}
+  p {
+    font-size: 16px;
+    line-height: 1.5;
+  }
 
-#output{
-margin-top:30px;
-line-height:1.6;
-font-size:16px;
-}
+  textarea {
+    width: 100%;
+    height: 250px;
+    padding: 12px;
+    font-size: 14px;
+    margin: 10px 0;
+    border-radius: 6px;
+    border: 1px solid #ccc;
+    resize: vertical;
+  }
 
-a{
-text-decoration:none;
-color:#0b57d0;
-}
+  button {
+    padding: 12px 25px;
+    margin-top: 10px;
+    font-size: 16px;
+    cursor: pointer;
+    border-radius: 6px;
+    border: none;
+    background-color: #0b57d0;
+    color: white;
+  }
+
+  button:hover {
+    background-color: #084ba0;
+  }
+
+  #output {
+    margin-top: 30px;
+    line-height: 1.6;
+    font-size: 16px;
+  }
+
+  a {
+    text-decoration: none;
+    color: #0b57d0;
+    cursor: pointer;
+    position: relative;
+  }
+
+  a:hover::after {
+    content: "Click to copy ticket metadata";
+    position: absolute;
+    top: -25px;
+    left: 0;
+    background: #333;
+    color: white;
+    padding: 3px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    white-space: nowrap;
+  }
+
+  .instructions {
+    background: #eaf1fc;
+    padding: 15px;
+    border-left: 4px solid #0b57d0;
+    margin-bottom: 20px;
+    border-radius: 6px;
+  }
 </style>
-
 </head>
-
 <body>
 
-<h2>Zoho Ticket Formatter</h2>
+<h2>Retailcloud Zoho Ticket Formatter</h2>
 
-<p>Paste up to 10 tickets:</p>
+<div class="instructions">
+  <p><strong>How to use:</strong></p>
+  <ol>
+    <li>Paste up to 10 tickets in the format shown below (separate tickets with an empty line).</li>
+    <li>Click <strong>Generate & Copy</strong>. All tickets will be formatted and copied automatically.</li>
+    <li>Hover over the Zoho ticket ID to see a tooltip: “Click to copy ticket metadata.”</li>
+    <li>Paste the copied lines wherever needed (Slack, Docs, Emails).</li>
+  </ol>
+  <p><strong>Example format to paste:</strong></p>
+  <pre>
+Ticket ID: #114238
+Subject: DODGERS | FW: Adjustment showing 0 QOH
+Department: CS - General
+URL: https://desk.zoho.com/agent/retail12/cs-general/tickets/details/594198000091620894
+  </pre>
+</div>
 
-<textarea id="pasteData"></textarea>
-
+<textarea id="pasteData" placeholder="Paste ticket info here..."></textarea>
 <br>
 
 <button onclick="formatTickets()">Generate & Copy</button>
@@ -53,45 +110,39 @@ color:#0b57d0;
 <div id="output"></div>
 
 <script>
+function formatTickets() {
+    const rawData = document.getElementById('pasteData').value.trim();
+    if (!rawData) return alert("Please paste ticket data.");
 
-function formatTickets(){
+    const tickets = rawData.split(/\n\s*\n/).slice(0, 10); // max 10 tickets
+    let outputHtml = '';
+    let copyText = '';
 
-const rawData=document.getElementById("pasteData").value.trim()
+    tickets.forEach((ticket, index) => {
+        const ticketMatch = ticket.match(/Ticket ID:\s*(#[^\s]+)/i);
+        const subjectMatch = ticket.match(/Subject:\s*(.+)/i);
+        const urlMatch = ticket.match(/URL:\s*(https?:\/\/\S+)/i);
 
-if(!rawData){
-alert("Paste ticket data")
-return
+        if(ticketMatch && subjectMatch && urlMatch){
+            const ticketId = ticketMatch[1];
+            const subject = subjectMatch[1];
+            const url = urlMatch[1];
+
+            // output with hover tooltip
+            outputHtml += `<div><a href="${url}" target="_blank">${ticketId}</a> | ${subject}</div>`;
+            copyText += `${ticketId} | ${subject}\n`;
+        } else {
+            outputHtml += `<div style="color:red;">Ticket ${index+1} could not be parsed properly.</div>`;
+        }
+    });
+
+    document.getElementById('output').innerHTML = outputHtml;
+
+    // copy to clipboard automatically
+    navigator.clipboard.writeText(copyText.trim())
+        .then(() => alert("Formatted tickets copied to clipboard!"))
+        .catch(err => console.error('Failed to copy:', err));
 }
-
-const tickets=rawData.split(/\n\s*\n/).slice(0,10)
-
-let html=""
-let copyText=""
-
-tickets.forEach(ticket=>{
-
-const id=ticket.match(/Ticket ID:\s*(#[^\s]+)/i)
-const subject=ticket.match(/Subject:\s*(.+)/i)
-const url=ticket.match(/URL:\s*(https?:\/\/\S+)/i)
-
-if(id && subject && url){
-
-html+=`<div><a href="${url[1]}" target="_blank">${id[1]}</a> | ${subject[1]}</div>`
-
-copyText+=`${id[1]} | ${subject[1]}\n`
-
-}
-
-})
-
-document.getElementById("output").innerHTML=html
-
-navigator.clipboard.writeText(copyText.trim())
-
-alert("Copied to clipboard")
-
-}
-
 </script>
 
 </body>
