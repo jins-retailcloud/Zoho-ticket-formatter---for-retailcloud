@@ -2,8 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Retailcloud Zoho Ticket Formatter</title>
-
+<title>retailcloud Zoho Ticket Formatter</title>
 <style>
 body {
   font-family: Arial, sans-serif;
@@ -11,11 +10,9 @@ body {
   background: #f9f9f9;
   color: #333;
 }
-
 h2 {
   color: #0b57d0;
 }
-
 .instructions {
   background: #eaf1fc;
   padding: 15px;
@@ -23,7 +20,16 @@ h2 {
   margin-bottom: 20px;
   border-radius: 6px;
 }
-
+.toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 5px;
+}
+.toolbar span {
+  font-size: 14px;
+  color: #666;
+}
 textarea {
   width: 100%;
   height: 250px;
@@ -32,8 +38,8 @@ textarea {
   margin: 10px 0;
   border-radius: 6px;
   border: 1px solid #ccc;
+  box-sizing: border-box;
 }
-
 button {
   padding: 12px 25px;
   font-size: 16px;
@@ -43,23 +49,28 @@ button {
   background-color: #0b57d0;
   color: white;
 }
-
 button:hover {
   background-color: #084ba0;
 }
-
+button.secondary {
+  background-color: #e0e0e0;
+  color: #333;
+  padding: 8px 18px;
+  font-size: 14px;
+}
+button.secondary:hover {
+  background-color: #cfcfcf;
+}
 #output {
   margin-top: 30px;
   line-height: 1.6;
   font-size: 16px;
 }
-
 a {
   text-decoration: none;
   color: #0b57d0;
   position: relative;
 }
-
 a:hover::after {
   content: "Click to open ticket";
   position: absolute;
@@ -72,22 +83,40 @@ a:hover::after {
   border-radius: 4px;
   white-space: nowrap;
 }
+/* Toast notification (auto-dismisses after 5 seconds) */
+#toast {
+  position: fixed;
+  bottom: 30px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #333;
+  color: white;
+  padding: 12px 24px;
+  border-radius: 6px;
+  font-size: 15px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+  z-index: 1000;
+}
+#toast.show {
+  opacity: 1;
+}
+#toast.error {
+  background: #c0392b;
+}
 </style>
 </head>
-
 <body>
-
 <h2>Zoho Ticket Formatter</h2>
-
 <div class="instructions">
   <strong>How to use:</strong>
   <ol>
     <li>In Zoho, hover over the ticket ID → click <b>Copy Ticket Metadata</b></li>
-    <li>Paste up to 10 tickets below (separate each with a blank line)</li>
-    <li>Click <b>Generate & Copy</b></li>
+    <li>Paste up to 20 tickets below (separate each with a blank line) — the preview updates as you type</li>
+    <li>Click <b>Copy to Clipboard</b></li>
     <li>Paste directly into Slack / Email / Docs (links will be clickable)</li>
   </ol>
-
   <b>Example input:</b>
   <pre>
 Ticket ID: #114238
@@ -97,14 +126,33 @@ URL: https://desk.zoho.com/agent/retail12/cs-general/tickets/details/59419800009
   </pre>
 </div>
 
-<textarea id="pasteData" placeholder="Paste ticket metadata here..."></textarea>
+<div class="toolbar">
+  <span id="status"></span>
+  <button class="secondary" onclick="clearAll()">Clear</button>
+</div>
+
+<textarea id="pasteData" placeholder="Paste ticket metadata here..." oninput="formatTickets()"></textarea>
 <br>
-
-<button onclick="formatTickets()">Generate & Copy</button>
-
+<button onclick="copyResult()">Copy to Clipboard</button>
 <div id="output"></div>
+<div id="toast"></div>
 
 <script>
+const MAX_TICKETS = 20;
+let toastTimer = null;
+let htmlForClipboard = "";
+let plainText = "";
+
+// Toast that auto-dismisses after 5 seconds
+function showToast(message, isError = false) {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = isError ? 'show error' : 'show';
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => {
+        toast.className = '';
+    }, 5000);
+}
 
 // Copy function (HTML + Plain text)
 async function copyToClipboard(html, text) {
@@ -115,61 +163,85 @@ async function copyToClipboard(html, text) {
                 "text/plain": new Blob([text], { type: "text/plain" })
             })
         ]);
-        alert("Copied with clickable links!");
+        showToast("Copied with clickable links!");
     } catch (err) {
         console.error("Copy failed:", err);
-        alert("Copy failed. Try using Chrome.");
+        showToast("Copy failed. Try using Chrome.", true);
     }
 }
 
+// Live preview: runs on every input, only builds the output (no copying)
 function formatTickets() {
-
     const rawData = document.getElementById('pasteData').value.trim();
+    const output = document.getElementById('output');
+    const status = document.getElementById('status');
+    htmlForClipboard = "";
+    plainText = "";
 
     if (!rawData) {
-        alert("Please paste ticket data.");
+        output.innerHTML = "";
+        status.textContent = "";
         return;
     }
 
-    const tickets = rawData.split(/\n\s*\n/).slice(0, 10);
-
+    const allBlocks = rawData.split(/\n\s*\n/);
+    const tickets = allBlocks.slice(0, MAX_TICKETS);
     let outputHtml = "";
-    let htmlForClipboard = "";
-    let plainText = "";
+    let parsed = 0;
+    let failed = 0;
 
     tickets.forEach((ticket, index) => {
-
         const ticketMatch = ticket.match(/Ticket ID:\s*(#[^\s]+)/i);
         const subjectMatch = ticket.match(/Subject:\s*(.+)/i);
         const urlMatch = ticket.match(/URL:\s*(https?:\/\/\S+)/i);
-
         if (ticketMatch && subjectMatch && urlMatch) {
-
             const ticketId = ticketMatch[1];
             const subject = subjectMatch[1];
             const url = urlMatch[1];
-
             // UI display
             outputHtml += `<div><a href="${url}" target="_blank">${ticketId}</a> | ${subject}</div>`;
-
             // Clipboard HTML (clickable)
             htmlForClipboard += `<a href="${url}">${ticketId}</a> | ${subject}<br>`;
-
             // Plain fallback
             plainText += `${ticketId} | ${subject}\n`;
-
+            parsed++;
         } else {
             outputHtml += `<div style="color:red;">Ticket ${index+1} could not be parsed</div>`;
+            failed++;
         }
     });
 
-    document.getElementById('output').innerHTML = outputHtml;
+    output.innerHTML = outputHtml;
 
-    // Copy to clipboard
+    // Status line: parsed / failed / over-limit info
+    let statusText = `${parsed} ticket${parsed === 1 ? "" : "s"} parsed`;
+    if (failed) statusText += `, ${failed} failed`;
+    if (allBlocks.length > MAX_TICKETS) {
+        statusText += ` — only first ${MAX_TICKETS} of ${allBlocks.length} processed`;
+    }
+    status.textContent = statusText;
+}
+
+// Copy button: copies whatever the live preview has built
+function copyResult() {
+    if (!plainText) {
+        showToast("Nothing to copy. Paste ticket data first.", true);
+        return;
+    }
     copyToClipboard(htmlForClipboard, plainText.trim());
 }
 
+// Clear input, output, status, and any visible toast
+function clearAll() {
+    document.getElementById('pasteData').value = "";
+    document.getElementById('output').innerHTML = "";
+    document.getElementById('status').textContent = "";
+    htmlForClipboard = "";
+    plainText = "";
+    document.getElementById('toast').className = "";
+    clearTimeout(toastTimer);
+    document.getElementById('pasteData').focus();
+}
 </script>
-
 </body>
 </html>
